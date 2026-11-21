@@ -1,0 +1,10 @@
+node_modules/
+
+# Banco gerado em tempo de execução (recriado a partir de servidor/banco/sementes.js)
+dados/banco.json
+
+# Variáveis de ambiente e chaves
+.env
+.env.*
+
+*.log

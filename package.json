@@ -1,0 +1,14 @@
+{
+  "name": "nedora-med-prototipo",
+  "version": "0.1.0",
+  "description": "Protótipo do sistema de gestão e rastreabilidade de estoque para clínicas",
+  "main": "servidor/servidor.js",
+  "scripts": {
+    "start": "node servidor/servidor.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}
