@@ -10,8 +10,8 @@ Projeto desenvolvido como Trabalho de Conclusão de Curso (TCC) na Etec.
 nedora-med-prototipo/
 ├── package.json
 ├── dados/                  → banco.json (criado sozinho na primeira execução)
-├── servidor/               → back-end em Node.js (sem dependências externas)
-│   ├── servidor.js         → sobe o servidor HTTP e entrega o front-end
+├── servidor/               → back-end em Node.js com Express
+│   ├── servidor.js         → sobe o servidor Express e entrega o front-end
 │   ├── rotas/rotas.js      → tabela de rotas da API
 │   ├── servicos/           → regras: login, estoque e OCR
 │   ├── banco/              → banco simulado em arquivo JSON e dados iniciais
@@ -32,8 +32,11 @@ Precisa de Node.js 18 ou mais novo (testado com Node 22).
 
 ```bash
 cd nedora-med-prototipo
+npm install   # instala o Express (só na primeira vez)
 npm start
 ```
+
+O Express é a única dependência externa do projeto.
 
 Depois abra **http://localhost:3000** no navegador.
 
@@ -61,6 +64,7 @@ Para zerar os dados, apague o arquivo `dados/banco.json` e reinicie o servidor. 
 - **Recusa:** exige motivo e devolve a quantidade ao lote.
 - **Termolábil:** só entra e só é guardado em local refrigerado.
 - **Histórico:** nenhuma movimentação é apagada; quem fez e quem confirmou ficam registrados.
+- **Estorno de entrada:** uma entrada lançada por engano pode ser estornada pelo Administrador, sempre pelo total e com motivo; a entrada original fica marcada como estornada e nada é apagado.
 
 ## Leitura de receita com a Google Cloud Vision API
 

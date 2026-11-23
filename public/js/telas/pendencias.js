@@ -1,7 +1,7 @@
 // Tela de pendências: confirma ou recusa as saídas que aguardam decisão.
 
 import { chamarApi } from '../api.js'; // chamadas à API
-import { criarCaixa, criarElemento, criarTabela, criarEtiqueta, formatarDataHora, mostrarAviso } from '../ui.js'; // ajudantes de tela
+import { criarCaixa, criarElemento, criarTabela, criarEtiqueta, formatarDataHora, mostrarAviso, pedirMotivo } from '../ui.js'; // ajudantes de tela
 
 // Desenha a tela de pendências dentro da área recebida
 export default async function desenharPendencias(area) {
@@ -9,17 +9,34 @@ export default async function desenharPendencias(area) {
   area.appendChild(caixa); // mostra a caixa
 
   // Cria os botões Confirmar e Recusar de uma linha
-  function criarBotoesAcao(id) {
+  function criarBotoesAcao(mov) {
     const grupo = criarElemento('div', 'botoes'); // área com os dois botões
     const botaoConfirmar = criarElemento('button', 'botao pequeno', 'Confirmar'); // botão confirmar
     botaoConfirmar.type = 'button'; // não envia formulário
-    botaoConfirmar.addEventListener('click', () => decidir(`/api/movimentacoes/${id}/confirmar`, {}));
+    botaoConfirmar.addEventListener('click', () => decidir(`/api/movimentacoes/${mov.id}/confirmar`, {})); // confirma a saída
     const botaoRecusar = criarElemento('button', 'botao pequeno secundario', 'Recusar'); // botão recusar
     botaoRecusar.type = 'button'; // não envia formulário
-    botaoRecusar.addEventListener('click', () => {
-      const motivo = prompt('Escreva o motivo da recusa:'); // pede o motivo
-      if (motivo === null) return; // o usuário cancelou
-      decidir(`/api/movimentacoes/${id}/recusar`, { motivo }); // envia a recusa com o motivo
+    botaoRecusar.addEventListener('click', async () => { // ao clicar em recusar...
+      const recusou = await pedirMotivo({ // abre o diálogo de recusa
+        titulo: 'Recusar saída', // título do diálogo
+        linhas: [ // resumo da saída escolhida
+          `Item: ${mov.itemNome}`,
+          `Lote: ${mov.numeroLote} · Quantidade: ${mov.quantidade}`,
+          `Destino: ${mov.destino}`,
+          `Solicitada em ${formatarDataHora(mov.data)} por ${mov.responsavelNome}`,
+        ],
+        rotulo: 'Motivo da recusa', // rótulo do campo
+        textoBotao: 'Confirmar recusa', // texto do botão principal
+        aviso: 'A quantidade voltará ao lote.', // aviso fixo
+        aoConfirmar: motivo => chamarApi('POST', `/api/movimentacoes/${mov.id}/recusar`, { motivo }), // recusa a saída
+      });
+      if (!recusou) return; // o usuário cancelou
+      mostrarAviso(caixa, 'Saída recusada.', 'ok'); // confirma para o usuário
+      try {
+        await atualizarLista(); // atualiza a tabela
+      } catch (erro) {
+        mostrarAviso(caixa, erro.message, 'erro'); // mostra erro ao atualizar
+      }
     });
     grupo.append(botaoConfirmar, botaoRecusar); // junta os botões
     return grupo; // devolve o grupo
@@ -50,7 +67,7 @@ export default async function desenharPendencias(area) {
         mov.destino,
         mov.responsavelNome,
         mov.perfisQueConfirmam.join(' ou '), // mostra quem pode confirmar
-        mov.podeConfirmar ? criarBotoesAcao(mov.id) : criarEtiqueta('Sem permissão', 'alerta'), // botões só para quem pode
+        mov.podeConfirmar ? criarBotoesAcao(mov) : criarEtiqueta('Sem permissão', 'alerta'), // botões só para quem pode
       ]),
     ));
   }

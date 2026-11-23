@@ -266,6 +266,20 @@ select {
 input:focus,
 select:focus { border-color: var(--primaria); }
 
+textarea {
+  font: inherit;
+  min-height: 96px;
+  padding: 8px 12px;
+  border: 1.5px solid #8b9a97;
+  border-radius: 8px;
+  background: var(--superficie);
+  color: var(--texto);
+  width: 100%;
+  resize: vertical; /* o usuário pode aumentar a altura se quiser */
+}
+
+textarea:focus { border-color: var(--primaria); }
+
 .duas-colunas {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -293,9 +307,51 @@ select:focus { border-color: var(--primaria); }
 .botao.pequeno { min-height: 38px; padding: 6px 12px; font-size: 15px; }
 .botoes { display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* ---------- 7.1 Diálogo de confirmação ---------- */
+.dialogo {
+  width: min(520px, calc(100% - 32px)); /* cabe no celular e não fica largo demais */
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  max-height: calc(100% - 32px); /* não passa da altura da tela */
+  overflow-y: auto; /* rola por dentro quando o conteúdo é alto */
+  border-radius: var(--raio);
+  background: var(--superficie);
+  color: var(--texto);
+  box-shadow: 0 24px 64px rgba(15, 40, 45, .28);
+}
+
+.dialogo::backdrop { background: rgba(15, 40, 45, .45); } /* escurece o fundo */
+
+.dialogo .formulario { padding: 22px; } /* respiro interno do diálogo */
+.dialogo .aviso { margin: 0; } /* o espaçamento já vem do grid do formulário */
+.dialogo-titulo { margin: 0; }
+
+.dialogo-resumo {
+  padding: 10px 14px;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  background: var(--fundo);
+}
+
+.dialogo-resumo p { margin: 2px 0; font-size: 15px; }
+
+.dialogo-aviso {
+  padding: 10px 14px;
+  border: 1px solid #e8c79a;
+  border-radius: 8px;
+  background: var(--alerta-fundo);
+  color: var(--alerta);
+  font-weight: bold;
+  margin: 0;
+}
+
+.dialogo-acoes { justify-content: flex-end; } /* botões alinhados à direita */
+
 button:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible {
   outline: 3px solid var(--destaque); /* contorno âmbar para quem navega pelo teclado */
   outline-offset: 2px;
 }

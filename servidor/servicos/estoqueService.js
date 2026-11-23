@@ -203,6 +203,37 @@ class EstoqueService { // serviço que concentra as regras do estoque
     return this.banco.atualizar('movimentacoes', mov.id, { situacao: 'Recusada', confirmadoPorId: usuario.id, motivo: motivoLimpo }); // marca como recusada
   }
 
+  // ---------- Estorno de entrada ----------
+
+  estornarEntrada(movimentacaoId, motivo, usuario) { // desfaz uma entrada lançada por engano (estorno sempre total)
+    const mov = this.banco.buscarPorId('movimentacoes', movimentacaoId); // procura a movimentação pelo id
+    if (!mov) throw new ErroRegra('Movimentação não encontrada.', 404); // não existe
+    if (mov.tipo !== 'Entrada') throw new ErroRegra('Somente entradas podem ser estornadas.'); // saídas não entram nesta regra
+    if (mov.situacao !== 'Concluída') throw new ErroRegra('Esta entrada já foi estornada.', 409); // impede estorno repetido
+
+    const motivoLimpo = String(motivo || '').trim(); // motivo sem espaços nas pontas
+    if (!motivoLimpo) throw new ErroRegra('Escreva o motivo do estorno.'); // motivo obrigatório
+
+    const item = this.banco.buscarPorId('itens', mov.itemId); // item da entrada
+    const lote = this.banco.buscarPorId('lotes', mov.loteId); // lote que recebeu a entrada
+    if (!item) throw new ErroRegra('Item da entrada não encontrado.', 409); // dado inconsistente
+    if (!lote) throw new ErroRegra('Lote da entrada não encontrado.', 409); // dado inconsistente
+    if (lote.quantidade < mov.quantidade) { // o saldo do lote já foi usado total ou parcialmente
+      throw new ErroRegra(`Saldo do lote já movimentado. Disponível: ${lote.quantidade} de ${mov.quantidade}.`, 409); // não deixa o saldo ficar negativo
+    }
+
+    this.banco.atualizar('lotes', lote.id, { quantidade: lote.quantidade - mov.quantidade }); // devolve o lote ao saldo anterior
+
+    const estorno = this.registrarMovimentacao({ // grava o estorno no histórico
+      tipo: 'Estorno', item, lote, quantidade: mov.quantidade, // mesma quantidade da entrada: estorno total
+      origem: mov.destino, destino: 'Estorno de entrada', usuario, situacao: 'Concluída', // mostra de onde o saldo saiu
+    });
+    this.banco.atualizar('movimentacoes', estorno.id, { motivo: motivoLimpo, estornaMovimentacaoId: mov.id }); // liga o estorno à entrada original
+    this.banco.atualizar('movimentacoes', mov.id, { situacao: 'Estornada', motivo: motivoLimpo, estornoMovimentacaoId: estorno.id }); // marca a entrada original
+
+    return estorno; // devolve o estorno criado
+  }
+
   // ---------- Listas e painel ----------
 
   formatarMovimentacao(mov) { // transforma a movimentação gravada em dados prontos para a tela

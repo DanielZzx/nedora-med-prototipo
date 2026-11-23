@@ -1,25 +1,8 @@
-// Tabela de rotas da API: liga cada endereço (ex.: GET /api/itens) à regra correspondente.
+// Tabela de rotas da API: usa o Express para ligar cada endereço à regra correspondente.
 
+const express = require('express'); // framework web usado para criar o roteador
 const { ErroRegra } = require('../utils/erros'); // erro com status HTTP
 const { PERFIS } = require('../servicos/autenticacaoService'); // lista de perfis, enviada para a tela de usuários
-
-// Compara um modelo de rota (ex.: /api/itens/:id/lotes) com o caminho real.
-// Devolve os parâmetros encontrados (ex.: { id: 'i-dipirona' }) ou null se não combinar.
-function casarCaminho(modelo, caminho) {
-  const pedacosModelo = modelo.split('/'); // divide o modelo nas barras
-  const pedacosCaminho = caminho.split('/'); // divide o caminho real nas barras
-  if (pedacosModelo.length !== pedacosCaminho.length) return null; // quantidades diferentes: não combina
-
-  const parametros = {}; // guarda os valores dos parâmetros
-  for (let i = 0; i < pedacosModelo.length; i++) { // percorre cada pedaço
-    if (pedacosModelo[i].startsWith(':')) { // pedaço com : é um parâmetro
-      parametros[pedacosModelo[i].slice(1)] = decodeURIComponent(pedacosCaminho[i]); // guarda o valor
-    } else if (pedacosModelo[i] !== pedacosCaminho[i]) { // pedaço fixo diferente
-      return null; // não combina
-    }
-  }
-  return parametros; // combina: devolve os parâmetros
-}
 
 // Pega o token do cabeçalho "Authorization: Bearer <token>"
 function extrairToken(cabecalhos) {
@@ -27,92 +10,119 @@ function extrairToken(cabecalhos) {
   return cabecalho.startsWith('Bearer ') ? cabecalho.slice(7) : null; // remove "Bearer " do começo
 }
 
-// Monta o roteador com os serviços e devolve a função que trata cada requisição da API
+// Cria um middleware que exige login e coloca o usuário logado em req.usuario
+function exigirLogin(autenticacao) {
+  return (requisicao, resposta, proximo) => { // função chamada antes de cada rota protegida
+    const usuario = autenticacao.usuarioPorToken(extrairToken(requisicao.headers)); // acha o dono do token
+    if (!usuario) { // sem token válido
+      proximo(new ErroRegra('Faça login para continuar.', 401)); // entrega o erro para o tratamento central
+      return;
+    }
+    requisicao.usuario = usuario; // guarda o usuário para a rota usar
+    proximo(); // segue para a rota
+  };
+}
+
+// Cria um middleware que aceita somente os perfis informados
+function exigirPerfis(perfis) {
+  return (requisicao, resposta, proximo) => { // função chamada depois do login
+    if (!perfis.includes(requisicao.usuario.perfil)) { // perfil sem permissão
+      proximo(new ErroRegra('Somente o Administrador pode acessar esta função.', 403)); // erro de permissão
+      return;
+    }
+    proximo(); // perfil permitido: segue para a rota
+  };
+}
+
+// Monta o roteador do Express com os serviços e devolve o router pronto
 function criarRoteador(servicos) {
   const { autenticacao, estoque, ocr } = servicos; // serviços usados pelas rotas
+  const roteador = express.Router(); // cria o roteador da API
+  const login = exigirLogin(autenticacao); // middleware de login reaproveitado nas rotas protegidas
 
-  const rotas = [
-    { // login: a única rota que não exige token
-      metodo: 'POST', caminho: '/api/login', publica: true,
-      executar: ({ corpo }) => ({ status: 200, dados: autenticacao.entrar(corpo.usuario, corpo.senha) }),
-    },
-    { // lista de usuários (só Administrador)
-      metodo: 'GET', caminho: '/api/usuarios', perfis: ['Administrador'],
-      executar: () => ({ status: 200, dados: { usuarios: autenticacao.listarUsuarios(), perfis: PERFIS } }),
-    },
-    { // cadastro de usuário (só Administrador)
-      metodo: 'POST', caminho: '/api/usuarios', perfis: ['Administrador'],
-      executar: ({ corpo }) => ({ status: 201, dados: autenticacao.cadastrarUsuario(corpo) }),
-    },
-    { // painel com contadores e alertas
-      metodo: 'GET', caminho: '/api/painel',
-      executar: () => ({ status: 200, dados: estoque.painel() }),
-    },
-    { // lista de itens com saldo
-      metodo: 'GET', caminho: '/api/itens',
-      executar: () => ({ status: 200, dados: estoque.listarItens() }),
-    },
-    { // cadastro de item
-      metodo: 'POST', caminho: '/api/itens',
-      executar: ({ corpo }) => ({ status: 201, dados: estoque.cadastrarItem(corpo) }),
-    },
-    { // lotes com saldo de um item
-      metodo: 'GET', caminho: '/api/itens/:id/lotes',
-      executar: ({ params }) => ({ status: 200, dados: estoque.listarLotes(params.id) }),
-    },
-    { // lista de locais
-      metodo: 'GET', caminho: '/api/locais',
-      executar: () => ({ status: 200, dados: estoque.listarLocais() }),
-    },
-    { // entrada de lote; o usuário logado vem do token, nunca do corpo da requisição
-      metodo: 'POST', caminho: '/api/entradas',
-      executar: ({ corpo, usuario }) => ({ status: 201, dados: estoque.registrarEntrada({ ...corpo, usuario }) }),
-    },
-    { // saída de itens (fica pendente)
-      metodo: 'POST', caminho: '/api/saidas',
-      executar: ({ corpo, usuario }) => ({ status: 201, dados: estoque.registrarSaida({ ...corpo, usuario }) }),
-    },
-    { // saídas aguardando decisão
-      metodo: 'GET', caminho: '/api/saidas/pendentes',
-      executar: ({ usuario }) => ({ status: 200, dados: estoque.listarPendentes(usuario) }),
-    },
-    { // confirma uma saída
-      metodo: 'POST', caminho: '/api/movimentacoes/:id/confirmar',
-      executar: ({ params, usuario }) => ({ status: 200, dados: estoque.confirmarSaida(params.id, usuario) }),
-    },
-    { // recusa uma saída, com motivo
-      metodo: 'POST', caminho: '/api/movimentacoes/:id/recusar',
-      executar: ({ params, corpo, usuario }) => ({ status: 200, dados: estoque.recusarSaida(params.id, corpo.motivo, usuario) }),
-    },
-    { // histórico, com busca opcional
-      metodo: 'GET', caminho: '/api/movimentacoes',
-      executar: ({ query }) => ({ status: 200, dados: estoque.listarMovimentacoes(query.get('busca') || '') }),
-    },
-    { // leitura de receita: texto + sugestões de itens do estoque
-      metodo: 'POST', caminho: '/api/ocr',
-      executar: async ({ corpo }) => ({ status: 200, dados: await ocr.lerReceita(corpo.imagemBase64, estoque.listarItens()) }),
-    },
-  ];
+  // login: a única rota que não exige token
+  roteador.post('/login', (requisicao, resposta) => {
+    resposta.json(autenticacao.entrar(requisicao.body.usuario, requisicao.body.senha)); // devolve token e usuário
+  });
 
-  // Trata uma requisição já separada em método, caminho, cabeçalhos, corpo e query
-  return async function tratarRequisicao({ metodo, caminho, cabecalhos, corpo, query }) {
-    for (const rota of rotas) { // procura a primeira rota que combina
-      if (rota.metodo !== metodo) continue; // método diferente: pula
-      const params = casarCaminho(rota.caminho, caminho); // tenta casar o caminho
-      if (!params) continue; // não combinou: pula
+  // lista de usuários (só Administrador)
+  roteador.get('/usuarios', login, exigirPerfis(['Administrador']), (requisicao, resposta) => {
+    resposta.json({ usuarios: autenticacao.listarUsuarios(), perfis: PERFIS }); // usuários sem dados sensíveis
+  });
 
-      let usuario = null; // usuário logado (null nas rotas públicas)
-      if (!rota.publica) { // rota protegida: exige login
-        usuario = autenticacao.usuarioPorToken(extrairToken(cabecalhos)); // acha o dono do token
-        if (!usuario) throw new ErroRegra('Faça login para continuar.', 401); // sem token válido
-      }
-      if (rota.perfis && !rota.perfis.includes(usuario.perfil)) { // perfil sem permissão
-        throw new ErroRegra('Somente o Administrador pode acessar esta função.', 403);
-      }
-      return rota.executar({ params, corpo, query, usuario }); // executa a regra da rota
-    }
-    throw new ErroRegra('Rota não encontrada.', 404); // nenhuma rota combinou
-  };
+  // cadastro de usuário (só Administrador)
+  roteador.post('/usuarios', login, exigirPerfis(['Administrador']), (requisicao, resposta) => {
+    resposta.status(201).json(autenticacao.cadastrarUsuario(requisicao.body)); // cria e devolve o usuário
+  });
+
+  // painel com contadores e alertas
+  roteador.get('/painel', login, (requisicao, resposta) => {
+    resposta.json(estoque.painel()); // dados do painel
+  });
+
+  // lista de itens com saldo
+  roteador.get('/itens', login, (requisicao, resposta) => {
+    resposta.json(estoque.listarItens()); // itens com saldo calculado
+  });
+
+  // cadastro de item
+  roteador.post('/itens', login, (requisicao, resposta) => {
+    resposta.status(201).json(estoque.cadastrarItem(requisicao.body)); // cria e devolve o item
+  });
+
+  // lotes com saldo de um item
+  roteador.get('/itens/:id/lotes', login, (requisicao, resposta) => {
+    resposta.json(estoque.listarLotes(requisicao.params.id)); // lotes do item pedido
+  });
+
+  // lista de locais
+  roteador.get('/locais', login, (requisicao, resposta) => {
+    resposta.json(estoque.listarLocais()); // locais de armazenamento
+  });
+
+  // entrada de lote; o usuário logado vem do token, nunca do corpo da requisição
+  roteador.post('/entradas', login, (requisicao, resposta) => {
+    const entrada = { ...requisicao.body, usuario: requisicao.usuario }; // corpo + usuário do token
+    resposta.status(201).json(estoque.registrarEntrada(entrada)); // registra a entrada
+  });
+
+  // saída de itens (fica pendente)
+  roteador.post('/saidas', login, (requisicao, resposta) => {
+    const saida = { ...requisicao.body, usuario: requisicao.usuario }; // corpo + usuário do token
+    resposta.status(201).json(estoque.registrarSaida(saida)); // registra a saída pendente
+  });
+
+  // saídas aguardando decisão
+  roteador.get('/saidas/pendentes', login, (requisicao, resposta) => {
+    resposta.json(estoque.listarPendentes(requisicao.usuario)); // pendentes conforme o perfil
+  });
+
+  // confirma uma saída
+  roteador.post('/movimentacoes/:id/confirmar', login, (requisicao, resposta) => {
+    resposta.json(estoque.confirmarSaida(requisicao.params.id, requisicao.usuario)); // confirma a saída
+  });
+
+  // recusa uma saída, com motivo
+  roteador.post('/movimentacoes/:id/recusar', login, (requisicao, resposta) => {
+    resposta.json(estoque.recusarSaida(requisicao.params.id, requisicao.body.motivo, requisicao.usuario)); // recusa com motivo
+  });
+
+  // estorna uma entrada lançada por engano (somente Administrador)
+  roteador.post('/movimentacoes/:id/estornar', login, exigirPerfis(['Administrador']), (requisicao, resposta) => {
+    resposta.json(estoque.estornarEntrada(requisicao.params.id, requisicao.body.motivo, requisicao.usuario)); // desfaz a entrada
+  });
+
+  // histórico, com busca opcional
+  roteador.get('/movimentacoes', login, (requisicao, resposta) => {
+    resposta.json(estoque.listarMovimentacoes(requisicao.query.busca || '')); // busca vazia devolve tudo
+  });
+
+  // leitura de receita: texto + sugestões de itens do estoque
+  roteador.post('/ocr', login, async (requisicao, resposta) => {
+    resposta.json(await ocr.lerReceita(requisicao.body.imagemBase64, estoque.listarItens())); // chama o OCR
+  });
+
+  return roteador; // devolve o roteador pronto para ser ligado em /api
 }
 
 module.exports = { criarRoteador }; // exporta a função que monta o roteador

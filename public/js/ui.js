@@ -58,6 +58,7 @@ export function criarEtiqueta(texto, tipo = 'ok') {
 export function tipoDaSituacao(situacao) {
   if (situacao === 'Pendente') return 'alerta'; // aguardando decisão
   if (situacao === 'Recusada') return 'critico'; // recusada
+  if (situacao === 'Estornada') return 'alerta'; // entrada desfeita
   return 'ok'; // concluída ou confirmada
 }
 
@@ -85,4 +86,100 @@ export function criarCaixa(titulo) {
   const caixa = criarElemento('section', 'caixa'); // a caixa
   caixa.appendChild(criarElemento('h2', '', titulo)); // o título dentro dela
   return caixa; // devolve a caixa
+}
+
+// Abre um diálogo nativo para pedir um motivo e executar uma ação após a confirmação.
+// Devolve true quando a ação termina com sucesso e false quando o usuário cancela.
+export function pedirMotivo({ titulo, linhas = [], rotulo = 'Motivo', textoBotao = 'Confirmar', aviso = 'Esta ação não pode ser desfeita.', aoConfirmar }) {
+  return new Promise(resolver => { // a promessa termina quando o diálogo fechar
+    const dialogo = criarElemento('dialog', 'dialogo'); // elemento nativo de diálogo
+    dialogo.setAttribute('aria-label', titulo); // nome acessível do diálogo
+    const formulario = criarElemento('form', 'formulario'); // formulário dentro do diálogo
+    dialogo.appendChild(formulario); // coloca o formulário no diálogo
+
+    formulario.appendChild(criarElemento('h2', 'dialogo-titulo', titulo)); // título do diálogo
+
+    if (linhas.length > 0) { // se veio um resumo para mostrar...
+      const resumo = criarElemento('div', 'dialogo-resumo'); // área do resumo
+      linhas.forEach(textoLinha => resumo.appendChild(criarElemento('p', '', textoLinha))); // uma linha por informação
+      formulario.appendChild(resumo); // coloca o resumo no formulário
+    }
+
+    formulario.appendChild(criarElemento('p', 'dialogo-aviso', aviso)); // aviso fixo da ação
+
+    const erro = criarElemento('p', 'aviso aviso-erro', ''); // área para erros do servidor
+    erro.setAttribute('role', 'alert'); // avisa leitores de tela
+    erro.hidden = true; // começa escondida
+    formulario.appendChild(erro); // coloca a área de erro no formulário
+
+    const rotuloCampo = criarElemento('label', '', rotulo); // rótulo do campo de motivo
+    const campo = criarElemento('textarea'); // campo de texto livre
+    campo.required = true; // motivo obrigatório
+    campo.rows = 3; // altura inicial confortável
+    campo.placeholder = 'Descreva o que aconteceu'; // dica dentro do campo
+    rotuloCampo.appendChild(campo); // coloca o campo dentro do rótulo
+    formulario.appendChild(rotuloCampo); // coloca o campo no formulário
+
+    const acoes = criarElemento('div', 'botoes dialogo-acoes'); // área dos botões
+    const cancelar = criarElemento('button', 'botao pequeno secundario', 'Cancelar'); // botão cancelar
+    cancelar.type = 'button'; // não envia o formulário
+    const confirmar = criarElemento('button', 'botao pequeno', textoBotao); // botão confirmar
+    confirmar.type = 'submit'; // envia o formulário
+    confirmar.disabled = true; // só libera quando houver motivo
+    acoes.append(cancelar, confirmar); // junta os botões
+    formulario.appendChild(acoes); // coloca os botões no formulário
+
+    let enviando = false; // indica que a ação está em andamento
+    let fechado = false; // evita fechar e resolver duas vezes
+
+    function fechar(confirmou) { // fecha o diálogo e devolve o resultado
+      if (fechado) return; // já fechou: não faz nada
+      fechado = true; // marca como fechado
+      dialogo.close(); // fecha o elemento nativo
+      dialogo.remove(); // tira o diálogo da página
+      resolver(confirmou); // devolve true (sucesso) ou false (cancelado)
+    }
+
+    campo.addEventListener('input', () => { // a cada alteração no motivo...
+      confirmar.disabled = campo.value.trim() === ''; // libera o botão só com texto
+      erro.hidden = true; // esconde o erro antigo
+    });
+
+    cancelar.addEventListener('click', () => { // ao clicar em cancelar...
+      if (!enviando) fechar(false); // fecha sem enviar
+    });
+
+    formulario.addEventListener('submit', async evento => { // ao confirmar...
+      evento.preventDefault(); // impede o envio padrão do formulário
+      const motivo = campo.value.trim(); // lê o motivo sem espaços nas pontas
+      if (!motivo || enviando) return; // sem motivo ou já enviando: não faz nada
+      enviando = true; // marca o envio em andamento
+      confirmar.disabled = true; // evita clique duplo
+      cancelar.disabled = true; // evita cancelar durante o envio
+      try {
+        await aoConfirmar(motivo); // executa a ação passada pelo chamador
+        fechar(true); // ação concluída: fecha com sucesso
+      } catch (falha) {
+        erro.textContent = falha?.message || 'Erro ao concluir a ação.'; // mostra a mensagem do servidor
+        erro.hidden = false; // torna o erro visível
+        enviando = false; // libera um novo envio
+        confirmar.disabled = false; // reabilita o botão confirmar
+        cancelar.disabled = false; // reabilita o botão cancelar
+        campo.focus(); // devolve o foco ao motivo
+      }
+    });
+
+    dialogo.addEventListener('cancel', evento => { // tecla Esc...
+      evento.preventDefault(); // controla o fechamento pelo nosso código
+      if (!enviando) fechar(false); // fecha sem enviar
+    });
+
+    dialogo.addEventListener('close', () => { // se o navegador fechar por outro motivo...
+      if (!fechado) fechar(false); // resolve como cancelamento
+    });
+
+    document.body.appendChild(dialogo); // coloca o diálogo na página
+    dialogo.showModal(); // abre como modal
+    campo.focus(); // foco inicial no campo de motivo
+  });
 }
