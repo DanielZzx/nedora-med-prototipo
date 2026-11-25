@@ -46,6 +46,14 @@ class Banco { // classe que representa o banco simulado
     this.salvar(); // grava a alteração
     return registro; // devolve o registro alterado
   }
+
+  remover(tabela, id) { // apaga um registro da tabela
+    const posicao = this.dados[tabela].findIndex(registro => registro.id === id); // posição do registro
+    if (posicao === -1) return null; // não existe: devolve null
+    const [removido] = this.dados[tabela].splice(posicao, 1); // tira o registro do array
+    this.salvar(); // grava a alteração no arquivo
+    return removido; // devolve o registro removido
+  }
 }
 
 module.exports = { Banco }; // exporta a classe Banco

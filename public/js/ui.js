@@ -88,9 +88,9 @@ export function criarCaixa(titulo) {
   return caixa; // devolve a caixa
 }
 
-// Abre um diálogo nativo para pedir um motivo e executar uma ação após a confirmação.
+// Abre um diálogo nativo para pedir um motivo (ou só confirmar) e executar uma ação após a confirmação.
 // Devolve true quando a ação termina com sucesso e false quando o usuário cancela.
-export function pedirMotivo({ titulo, linhas = [], rotulo = 'Motivo', textoBotao = 'Confirmar', aviso = 'Esta ação não pode ser desfeita.', aoConfirmar }) {
+export function pedirMotivo({ titulo, linhas = [], rotulo = 'Motivo', textoBotao = 'Confirmar', aviso = 'Esta ação não pode ser desfeita.', exigirMotivo = true, exigirSenha = false, rotuloSenha = 'Senha do Administrador', aoConfirmar }) {
   return new Promise(resolver => { // a promessa termina quando o diálogo fechar
     const dialogo = criarElemento('dialog', 'dialogo'); // elemento nativo de diálogo
     dialogo.setAttribute('aria-label', titulo); // nome acessível do diálogo
@@ -112,20 +112,39 @@ export function pedirMotivo({ titulo, linhas = [], rotulo = 'Motivo', textoBotao
     erro.hidden = true; // começa escondida
     formulario.appendChild(erro); // coloca a área de erro no formulário
 
-    const rotuloCampo = criarElemento('label', '', rotulo); // rótulo do campo de motivo
-    const campo = criarElemento('textarea'); // campo de texto livre
-    campo.required = true; // motivo obrigatório
-    campo.rows = 3; // altura inicial confortável
-    campo.placeholder = 'Descreva o que aconteceu'; // dica dentro do campo
-    rotuloCampo.appendChild(campo); // coloca o campo dentro do rótulo
-    formulario.appendChild(rotuloCampo); // coloca o campo no formulário
+    let campo = null; // campo de motivo; fica nulo quando a ação só precisa de confirmação
+    if (exigirMotivo) { // só pede o motivo quando a ação exige
+      const rotuloCampo = criarElemento('label', '', rotulo); // rótulo do campo de motivo
+      campo = criarElemento('textarea'); // campo de texto livre
+      campo.required = true; // motivo obrigatório
+      campo.rows = 3; // altura inicial confortável
+      campo.placeholder = 'Descreva o que aconteceu'; // dica dentro do campo
+      rotuloCampo.appendChild(campo); // coloca o campo dentro do rótulo
+      formulario.appendChild(rotuloCampo); // coloca o campo no formulário
+    }
+
+    let campoSenha = null; // campo de senha; fica nulo quando a ação não pede senha
+    if (exigirSenha) { // só pede a senha quando a ação exige
+      const rotuloCampoSenha = criarElemento('label', '', rotuloSenha); // rótulo do campo de senha
+      campoSenha = criarElemento('input'); // campo de senha
+      campoSenha.type = 'password'; // esconde o que for digitado
+      campoSenha.required = true; // senha obrigatória
+      campoSenha.autocomplete = 'current-password'; // ajuda o navegador a preencher
+      rotuloCampoSenha.appendChild(campoSenha); // coloca o campo dentro do rótulo
+      formulario.appendChild(rotuloCampoSenha); // coloca o campo no formulário
+    }
 
     const acoes = criarElemento('div', 'botoes dialogo-acoes'); // área dos botões
     const cancelar = criarElemento('button', 'botao pequeno secundario', 'Cancelar'); // botão cancelar
     cancelar.type = 'button'; // não envia o formulário
     const confirmar = criarElemento('button', 'botao pequeno', textoBotao); // botão confirmar
     confirmar.type = 'submit'; // envia o formulário
-    confirmar.disabled = true; // só libera quando houver motivo
+    function camposPreenchidos() { // diz se os campos obrigatórios já foram preenchidos
+      const motivoOk = !exigirMotivo || (campo && campo.value.trim() !== ''); // motivo, quando obrigatório
+      const senhaOk = !exigirSenha || (campoSenha && campoSenha.value !== ''); // senha, quando obrigatória
+      return motivoOk && senhaOk; // só libera quando tudo estiver preenchido
+    }
+    confirmar.disabled = !camposPreenchidos(); // começa bloqueado se houver campo obrigatório vazio
     acoes.append(cancelar, confirmar); // junta os botões
     formulario.appendChild(acoes); // coloca os botões no formulário
 
@@ -140,10 +159,12 @@ export function pedirMotivo({ titulo, linhas = [], rotulo = 'Motivo', textoBotao
       resolver(confirmou); // devolve true (sucesso) ou false (cancelado)
     }
 
-    campo.addEventListener('input', () => { // a cada alteração no motivo...
-      confirmar.disabled = campo.value.trim() === ''; // libera o botão só com texto
+    function aoDigitar() { // a cada alteração nos campos...
+      confirmar.disabled = !camposPreenchidos(); // libera o botão quando os obrigatórios estiverem preenchidos
       erro.hidden = true; // esconde o erro antigo
-    });
+    }
+    if (campo) campo.addEventListener('input', aoDigitar); // alteração no motivo
+    if (campoSenha) campoSenha.addEventListener('input', aoDigitar); // alteração na senha
 
     cancelar.addEventListener('click', () => { // ao clicar em cancelar...
       if (!enviando) fechar(false); // fecha sem enviar
@@ -151,13 +172,14 @@ export function pedirMotivo({ titulo, linhas = [], rotulo = 'Motivo', textoBotao
 
     formulario.addEventListener('submit', async evento => { // ao confirmar...
       evento.preventDefault(); // impede o envio padrão do formulário
-      const motivo = campo.value.trim(); // lê o motivo sem espaços nas pontas
-      if (!motivo || enviando) return; // sem motivo ou já enviando: não faz nada
+      const motivo = campo ? campo.value.trim() : ''; // lê o motivo sem espaços nas pontas
+      const senha = campoSenha ? campoSenha.value : ''; // lê a senha, quando houver
+      if (!camposPreenchidos() || enviando) return; // campos obrigatórios vazios ou já enviando: não faz nada
       enviando = true; // marca o envio em andamento
       confirmar.disabled = true; // evita clique duplo
       cancelar.disabled = true; // evita cancelar durante o envio
       try {
-        await aoConfirmar(motivo); // executa a ação passada pelo chamador
+        await aoConfirmar(motivo, senha); // executa a ação passada pelo chamador
         fechar(true); // ação concluída: fecha com sucesso
       } catch (falha) {
         erro.textContent = falha?.message || 'Erro ao concluir a ação.'; // mostra a mensagem do servidor
@@ -165,7 +187,7 @@ export function pedirMotivo({ titulo, linhas = [], rotulo = 'Motivo', textoBotao
         enviando = false; // libera um novo envio
         confirmar.disabled = false; // reabilita o botão confirmar
         cancelar.disabled = false; // reabilita o botão cancelar
-        campo.focus(); // devolve o foco ao motivo
+        (campo || campoSenha)?.focus(); // devolve o foco ao primeiro campo, se houver
       }
     });
 
@@ -180,6 +202,6 @@ export function pedirMotivo({ titulo, linhas = [], rotulo = 'Motivo', textoBotao
 
     document.body.appendChild(dialogo); // coloca o diálogo na página
     dialogo.showModal(); // abre como modal
-    campo.focus(); // foco inicial no campo de motivo
+    (campo || campoSenha)?.focus(); // foco inicial no primeiro campo, se houver
   });
 }

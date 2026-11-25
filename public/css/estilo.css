@@ -304,6 +304,8 @@ textarea:focus { border-color: var(--primaria); }
 .botao:hover { background: var(--primaria-escura); border-color: var(--primaria-escura); }
 .botao.secundario { background: var(--superficie); color: var(--primaria); }
 .botao.secundario:hover { background: var(--primaria-clara); }
+.botao.perigo { background: var(--superficie); color: var(--critico); border-color: var(--critico); } /* ação destrutiva */
+.botao.perigo:hover { background: var(--critico-fundo); }
 .botao.pequeno { min-height: 38px; padding: 6px 12px; font-size: 15px; }
 .botoes { display: flex; gap: 8px; flex-wrap: wrap; }
 

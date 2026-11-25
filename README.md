@@ -63,8 +63,9 @@ Para zerar os dados, apague o arquivo `dados/banco.json` e reinicie o servidor. 
 - **Confirmação por perfil:** medicamento só o Médico confirma; material, Técnico de enfermagem ou Enfermeiro.
 - **Recusa:** exige motivo e devolve a quantidade ao lote.
 - **Termolábil:** só entra e só é guardado em local refrigerado.
-- **Histórico:** nenhuma movimentação é apagada; quem fez e quem confirmou ficam registrados.
+- **Histórico:** nenhuma movimentação é apagada pelas operações normais (entrada, saída, recusa, estorno); quem fez e quem confirmou ficam registrados. A única exceção é a exclusão de um item pelo Administrador, que remove o histórico daquele item.
 - **Estorno de entrada:** uma entrada lançada por engano pode ser estornada pelo Administrador, sempre pelo total e com motivo; a entrada original fica marcada como estornada e nada é apagado.
+- **Exclusão de item:** o Administrador pode excluir qualquer item, informando a própria senha; a exclusão também apaga os lotes e as movimentações daquele item do histórico.
 
 ## Leitura de receita com a Google Cloud Vision API
 

@@ -70,6 +70,12 @@ function criarRoteador(servicos) {
     resposta.status(201).json(estoque.cadastrarItem(requisicao.body)); // cria e devolve o item
   });
 
+  // exclusão de item, lotes e histórico (só Administrador, com senha)
+  roteador.delete('/itens/:id', login, exigirPerfis(['Administrador']), (requisicao, resposta) => {
+    autenticacao.validarSenha(requisicao.usuario, requisicao.body.senha); // confere a senha de quem está logado
+    resposta.json(estoque.excluirItem(requisicao.params.id)); // apaga item, lotes e movimentações
+  });
+
   // lotes com saldo de um item
   roteador.get('/itens/:id/lotes', login, (requisicao, resposta) => {
     resposta.json(estoque.listarLotes(requisicao.params.id)); // lotes do item pedido

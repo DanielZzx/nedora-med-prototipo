@@ -95,6 +95,22 @@ class EstoqueService { // serviço que concentra as regras do estoque
     return this.banco.inserir('itens', item); // grava e devolve o item
   }
 
+  excluirItem(itemId) { // apaga o item, seus lotes e o histórico dele (só Administrador, após conferir a senha)
+    const item = this.banco.buscarPorId('itens', itemId); // procura o item
+    if (!item) throw new ErroRegra('Item não encontrado.', 404); // não existe
+
+    this.banco.listar('movimentacoes') // movimentações do item, inclusive entradas, saídas e estornos
+      .filter(mov => mov.itemId === itemId) // só as deste item
+      .forEach(mov => this.banco.remover('movimentacoes', mov.id)); // remove do histórico
+
+    this.banco.listar('lotes') // lotes do item
+      .filter(lote => lote.itemId === itemId) // só os deste item
+      .forEach(lote => this.banco.remover('lotes', lote.id)); // remove os lotes
+
+    this.banco.remover('itens', itemId); // apaga o cadastro
+    return item; // devolve o item removido
+  }
+
   // ---------- Movimentações ----------
 
   registrarMovimentacao({ tipo, item, lote, quantidade, origem, destino, usuario, situacao }) { // grava uma linha no histórico

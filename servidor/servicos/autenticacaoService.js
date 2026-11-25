@@ -41,6 +41,12 @@ class AutenticacaoService { // serviço de login e de usuários
     return this.banco.buscarPorId('usuarios', usuarioId); // devolve o usuário completo, uso interno
   }
 
+  validarSenha(usuario, senha) { // confere a senha do usuário logado antes de uma ação sensível
+    if (!usuario || !conferirSenha(String(senha || ''), usuario.sal, usuario.senhaHash)) { // senha ausente ou errada
+      throw new ErroRegra('Senha do Administrador incorreta.', 403); // bloqueia a ação
+    }
+  }
+
   listarUsuarios() { // lista de usuários sem dados sensíveis
     return this.banco.listar('usuarios').map(dadosPublicos); // aplica a limpeza em cada um
   }
